@@ -1,0 +1,137 @@
+namespace: "${PATRONI_NAMESPACE}"
+scope: "${PATRONI_SCOPE}"
+name: "${PATRONI_SCOPE}-${INSTANCE}"
+
+etcd:
+    host: "${ETCD_SERVER}"
+
+restapi:
+    listen: 0.0.0.0:8008
+    connect_address: "${SERVER_IP_ADDRESS}:8008"
+
+bootstrap:
+    # this section will be written into Etcd:/<namespace>/<scope>/config after initializing new cluster
+    # and all other cluster members will use it as a `global configuration`
+
+    post_init: /scripts/post_init.sh "${HUMAN_ROLE}"
+    dcs:
+        standby_cluster:
+        ttl: 30
+        loop_wait: 10
+        retry_timeout: 10
+        maximum_lag_on_failover: 10485760
+        max_timelines_history: 20
+        master_start_timeout: 300
+        synchronous_mode: false
+        synchronous_mode_strict: false
+        postgresql:
+            use_pg_rewind: true
+            use_slots: true
+            parameters:
+                archive_mode: 'on'
+                archive_timeout: 1800s
+                wal_keep_segments: 8
+                wal_level: replica
+                archive_command: '/scripts/wale_archive_wal.sh %p'
+                wal_log_hints: 'on'
+                max_wal_senders: 10
+                max_connections: 100
+                hot_standby_feedback: 'on'
+                max_replication_slots: 10
+                hot_standby: 'on'
+                tcp_keepalives_idle: 900
+                tcp_keepalives_interval: 100
+
+                log_line_prefix: '%t [%p]: [%l-1] %c %x %d %u %a %h '
+                log_truncate_on_rotation: 'on'
+                log_rotation_age: '1440'
+                log_min_messages: 'WARNING'
+                log_checkpoints: 'on'
+                log_lock_waits: 'on'
+                log_connections: 'off'
+                log_disconnections: 'off'
+                log_statement: 'ddl'
+                log_temp_files: 0
+                log_autovacuum_min_duration: '60s'
+                log_min_error_statement: 'NOTICE'
+                log_min_duration_statement: '30s'
+
+                track_functions: all
+                checkpoint_completion_target: 0.9
+                autovacuum_max_workers: 5
+                autovacuum_vacuum_scale_factor: 0.05
+                autovacuum_analyze_scale_factor: 0.02
+                max_locks_per_transaction: 128
+                max_worker_processes: 15
+                max_prepared_transactions: 0
+    # eof dcs
+
+    initdb:
+        -   auth-host: md5
+        -   auth-local: trust
+        -   encoding: UTF8
+        -   locale: en_US.UTF-8
+        - data-checksums
+    # eof initdb
+
+    pg_hba:
+        - local     all             all                     trust
+        - host      all             all     127.0.0.1/32    trust
+        - local     replication     all                     peer
+        - host      replication     all     all             md5
+        - host      all             all     all             md5
+        - hostssl   all             all     all             md5
+    # eof pg_hba
+
+    users:
+        admin:
+            password: ${POSTGRES_ADMIN_PASSWORD}
+            options:
+                - createrole
+                - createdb
+    # eof users
+
+postgresql:
+    data_dir: ${PGDATA}
+    use_unix_socket: true
+    custom_conf: '${PGROOT}/postgres.base.conf'
+    callbacks:
+        on_role_change: /scripts/on_role_change.sh ${HUMAN_ROLE} true
+    authentication:
+        superuser:
+            username: postgres
+            password: '${POSTGRES_SUPERUSER_PASSWORD}'
+        replication:
+            username: replication
+            password: '${POSTGRES_REPLICATION_PASSWORD}'
+    create_replica_methods:
+        - wal_g
+    wal_g:
+        command: "/scripts/wale_full_restore.sh"
+        retries: 3
+        no_master: 1
+        type: restore
+        scope: ${PATRONI_SCOPE}
+        datadir: ${$PGDATA}
+        threshold_backup_size_percentage: ${WALE_BACKUP_THRESHOLD_PERCENTAGE}
+        threshold_megabytes: ${WALE_BACKUP_THRESHOLD_MEGABYTES}
+    recovery_conf:
+        restore_command: '/scripts/wale_restore_wal.sh %f %p'
+        recovery_target_timeline: latest
+    listen: 0.0.0.0:5432
+    connect_address: ${SERVER_IP_ADDRESS}:5432
+    # config_dir: /etc/postgresql/patroni
+
+    parameters:
+        ssl: off
+        unix_socket_directories: /var/run/postgresql
+        logging_collector: 'on'
+
+watchdog:
+    mode: automatic
+
+tags:
+    nofailover: false
+    noloadbalance: false
+    clonefrom: false
+    nosync: false

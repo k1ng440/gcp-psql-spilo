@@ -1,0 +1,13 @@
+[Unit]
+Description=Prometheus exporter for PostgreSQL
+Documentation=https://github.com/wrouesnel/postgres_exporter
+
+[Service]
+Restart=always
+User=postgres
+Environment=DATA_SOURCE_NAME="user=postgres host=/var/run/postgresql/ sslmode=disable"
+Environment=PG_EXPORTER_EXTEND_QUERY_PATH="/etc/patroni/node_exporter_queries.yaml"
+ExecStart=/var/go/bin/postgres_exporter
+
+[Install]
+WantedBy=multi-user.target

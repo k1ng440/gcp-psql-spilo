@@ -1,0 +1,22 @@
+[Unit]
+Description=Runners to orchestrate a high-availability PostgreSQL
+After=syslog.target network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+EnvironmentFile=-/etc/environment
+WorkingDirectory=~
+ExecStartPre=-/usr/bin/sudo /bin/chown postgres /dev/watchdog
+ExecStartPre=-/bin/mkdir -m 2750 -p /var/run/postgresql/${PGVERSION}-main.pg_stat_tmp
+ExecStart=/usr/local/bin/patroni /etc/patroni/patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=30
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

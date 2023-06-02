@@ -1,0 +1,1 @@
+OPTIONS="--collector.systemd --collector.processes --collector.cpu --collector.cpufreq --collector.diskstats --collector.loadavg"

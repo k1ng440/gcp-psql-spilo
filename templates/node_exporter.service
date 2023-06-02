@@ -1,0 +1,10 @@
+[Unit]
+Description=Node Exporter
+
+[Service]
+User=node_exporter
+EnvironmentFile=/etc/sysconfig/node_exporter
+ExecStart=/var/go/bin/node_exporter
+
+[Install]
+WantedBy=multi-user.target
